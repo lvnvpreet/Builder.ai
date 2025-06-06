@@ -5,8 +5,10 @@ Quality Agent - Validates and optimizes generated content
 import re
 import logging
 from typing import Dict, List
+from core.logging import get_agent_logger
 
 logger = logging.getLogger(__name__)
+agent_logger = get_agent_logger('quality')
 
 
 class QualityAgent:
@@ -15,7 +17,6 @@ class QualityAgent:
     def __init__(self):
         self.quality_score = 0
         self.issues = []
-    
     async def validate_generation(self, content_data: dict, design_data: dict, structure_data: dict, images_data: dict) -> dict:
         """
         Validate and optimize the generated website components
@@ -30,6 +31,7 @@ class QualityAgent:
             Dictionary containing validation results and optimizations
         """
         try:
+            agent_logger.info("Starting website quality validation")
             validation_results = {
                 "overall_score": 0,
                 "content_validation": self._validate_content(content_data),
@@ -47,17 +49,20 @@ class QualityAgent:
                 validation_results["structure_validation"]["score"],
                 validation_results["images_validation"]["score"]
             ]
-            validation_results["overall_score"] = sum(scores) / len(scores)
-            
-            # Collect all recommendations and issues
+            validation_results["overall_score"] = sum(scores) / len(scores)            # Collect all recommendations and issues
             for section in ["content_validation", "design_validation", "structure_validation", "images_validation"]:
                 validation_results["recommendations"].extend(validation_results[section].get("recommendations", []))
                 validation_results["issues"].extend(validation_results[section].get("issues", []))
             
+            agent_logger.info(f"Quality validation completed with overall score: {validation_results['overall_score']:.2f}")
+            # Log summary of validation results
+            agent_logger.info(f"Quality issues found: {len(validation_results['issues'])}")
+            agent_logger.info(f"Quality recommendations: {len(validation_results['recommendations'])}")
+            # Log the actual output (truncated for log readability)
+            agent_logger.info(f"Quality validation output: {str(validation_results)[:500]}...")
             return validation_results
-            
         except Exception as e:
-            logger.error(f"Quality validation failed: {e}")
+            agent_logger.error(f"Quality validation failed: {e}")
             return {
                 "overall_score": 0,
                 "error": str(e),

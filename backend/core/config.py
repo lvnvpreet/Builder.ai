@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = "INFO"
     LOG_FILE: str = "logs/app.log"
+    AGENT_LOG_FILE: str = "logs/agent_output.log"
     
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"

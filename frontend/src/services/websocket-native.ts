@@ -109,13 +109,13 @@ class WebSocketNativeService {
               qualityScore: data.quality_score || 0
             });
             break;
-            
-          case 'error':
+              case 'error':
+          case 'generation_error':
             // Handle errors
             const error: GenerationError = {
-              message: data.message || 'Unknown error',
+              message: data.error || data.message || 'Unknown error',
               code: data.code || 'ERROR',
-              details: data.details || ''
+              details: Array.isArray(data.errors) ? data.errors.join(', ') : (data.details || '')
             };
             useAppStore.getState().failGeneration(error);
             break;

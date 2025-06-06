@@ -97,7 +97,11 @@ async def get_generation_result(generation_id: str):
             raise HTTPException(status_code=404, detail="Generation not found")
         
         if generation.get("status") != "completed":
-            raise HTTPException(status_code=400, detail="Generation not completed yet")
+            if generation.get("status") == "failed":
+                errors = generation.get("errors", ["Unknown error occurred"])
+                raise HTTPException(status_code=422, detail={"errors": errors, "message": "Generation failed"})
+            else:
+                raise HTTPException(status_code=400, detail="Generation not completed yet")
         
         return {
             "generation_id": generation_id,

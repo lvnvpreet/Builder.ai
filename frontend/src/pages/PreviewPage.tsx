@@ -5,6 +5,7 @@ import Button from '@/components/ui/Button';
 import { useAppStore } from '@/store';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { getFullWebsiteUrl } from '@/utils/config';
 
 const PreviewPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -61,12 +62,11 @@ const PreviewPage: React.FC = () => {
               </h1>
             </div>
             
-            <div>
-              <Button 
+            <div>              <Button 
                 variant="outline"
                 size="sm"
                 rightIcon={<ExternalLink className="h-4 w-4" />}
-                onClick={() => window.open(currentWebsite.websiteUrl, '_blank')}
+                onClick={() => window.open(getFullWebsiteUrl(currentWebsite.websiteUrl), '_blank')}
               >
                 Open in New Tab
               </Button>
@@ -107,9 +107,8 @@ const PreviewPage: React.FC = () => {
           {/* Preview iframe */}
           <div className="lg:col-span-3">
             <Card padding="none">
-              <div className="aspect-[16/9] w-full">
-                <iframe
-                  src={currentWebsite.websiteUrl}
+              <div className="aspect-[16/9] w-full">                <iframe
+                  src={getFullWebsiteUrl(currentWebsite.websiteUrl)}
                   className="w-full h-full border-0"
                   title="Website Preview"
                 />

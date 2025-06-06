@@ -8,6 +8,7 @@ from typing import TypedDict, List, Dict, Any
 import asyncio
 import datetime
 import logging
+import random
 
 from agents.content_agent import ContentAgent
 from agents.design_agent import DesignAgent
@@ -35,13 +36,16 @@ class GenerationState(TypedDict):
 
 class WebsiteGenerationWorkflow:
     """LangGraph workflow for orchestrating website generation"""
-    
     def __init__(self):
         self.content_agent = ContentAgent()
         self.design_agent = DesignAgent()
         self.structure_agent = StructureAgent()
         self.image_agent = ImageAgent()
         self.quality_agent = QualityAgent()
+        
+        # Get agent logger for workflow
+        from core.logging import get_agent_logger
+        self.agent_logger = get_agent_logger('workflow')
         
         # Build the workflow graph
         self.workflow = self._build_workflow()
@@ -85,22 +89,44 @@ class WebsiteGenerationWorkflow:
                 "timestamp": datetime.datetime.now().isoformat()
             })
             
-            content_data = await self.content_agent.generate_content(state["business_info"])
-            state["content_data"] = content_data
+            # Implement retry logic instead of falling back
+            max_retries = 3
+            retry_count = 0
+            last_exception = None
             
-            logger.info(f"Content generation completed for {state['generation_id']}")
-            return state
-        except Exception as e:
-            logger.error(f"Content generation failed: {e}")
-            state["errors"].append(f"Content generation error: {str(e)}")
+            while retry_count < max_retries:
+                try:
+                    content_data = await self.content_agent.generate_content(state["business_info"])
+                    state["content_data"] = content_data
+                    logger.info(f"Content generation completed for {state['generation_id']} on attempt {retry_count + 1}")
+                    return state
+                except Exception as e:
+                    retry_count += 1
+                    last_exception = e
+                    logger.warning(f"Content generation attempt {retry_count} failed: {e}. {'Retrying...' if retry_count < max_retries else 'Max retries reached.'}")
+                    await asyncio.sleep(2)  # Wait before retry
+            
+            # If we get here, all retries failed
+            logger.error(f"Content generation failed after {max_retries} attempts: {last_exception}")
+            state["errors"].append(f"Content generation error after {max_retries} attempts: {str(last_exception)}")
             
             # Send error update via WebSocket
             await manager.send_generation_update(state["generation_id"], {
                 "type": "error",
-                "message": str(e),
+                "message": f"Content generation failed after {max_retries} attempts: {str(last_exception)}",
                 "timestamp": datetime.datetime.now().isoformat()
             })
-            return state
+            
+            # Raise the exception instead of returning state with error
+            # This will cause the workflow to fail and prevent fallbacks
+            raise Exception(f"Content generation failed after {max_retries} attempts: {last_exception}")
+            
+            # No longer returning state with errors - we want the generation to fail
+            # return state
+        except asyncio.CancelledError:
+            logger.warning(f"Content generation cancelled for {state['generation_id']}")
+            raise
+        
     async def _parallel_generation_node(self, state: GenerationState) -> GenerationState:
         """Run design, structure, and image generation in parallel"""
         from api.routes.websocket import manager
@@ -119,41 +145,55 @@ class WebsiteGenerationWorkflow:
                 "timestamp": datetime.datetime.now().isoformat()
             })
             
-            # Run agents in parallel with timeout protection
+            # Define retry function for each agent
+            async def retry_agent_with_backoff(agent_func, max_retries=3, base_timeout=300.0):
+                retry_count = 0
+                last_exception = None
+                
+                while retry_count < max_retries:
+                    try:
+                        result = await asyncio.wait_for(
+                            agent_func(),
+                            timeout=base_timeout
+                        )
+                        # If we reach here, the agent succeeded
+                        return result
+                    except Exception as e:
+                        retry_count += 1
+                        last_exception = e
+                        logger.warning(f"Agent attempt {retry_count} failed: {e}")
+                        if retry_count < max_retries:
+                            # Exponential backoff with jitter
+                            delay = (2 ** retry_count) + random.uniform(0, 1)
+                            await asyncio.sleep(delay)  
+                
+                # If we reach here, all retries failed
+                logger.error(f"Agent failed after {max_retries} attempts: {last_exception}")
+                # Re-raise the exception instead of using fallbacks
+                raise last_exception
+            
+            # Define agent functions
+            async def design_task():
+                return await self.design_agent.generate_design(state["business_info"], state["content_data"])
+                
+            async def structure_task():
+                return await self.structure_agent.generate_structure(state["business_info"], state["content_data"])
+                
+            async def image_task():
+                return await self.image_agent.generate_images(state["business_info"], state["content_data"])
+            
+            # Run agents in parallel with retry logic
             tasks = [
-                asyncio.wait_for(
-                    self.design_agent.generate_design(state["business_info"], state["content_data"]),
-                    timeout=300.0  # 5 minutes per agent
-                ),
-                asyncio.wait_for(
-                    self.structure_agent.generate_structure(state["business_info"], state["content_data"]),
-                    timeout=300.0
-                ),
-                asyncio.wait_for(
-                    self.image_agent.generate_images(state["business_info"], state["content_data"]),
-                    timeout=60.0  # 1 minute for image search
-                )
+                retry_agent_with_backoff(design_task, max_retries=3, base_timeout=300.0),
+                retry_agent_with_backoff(structure_task, max_retries=3, base_timeout=300.0),
+                retry_agent_with_backoff(image_task, max_retries=3, base_timeout=60.0)
             ]
             
             try:
-                design_data, structure_data, images_data = await asyncio.gather(*tasks, return_exceptions=True)
+                # Wait for all tasks to complete or fail
+                design_data, structure_data, images_data = await asyncio.gather(*tasks)
                 
-                # Handle individual task failures
-                if isinstance(design_data, Exception):
-                    logger.error(f"Design generation failed: {design_data}")
-                    state["errors"].append(f"Design generation failed: {str(design_data)}")
-                    design_data = self._get_fallback_design()
-                
-                if isinstance(structure_data, Exception):
-                    logger.error(f"Structure generation failed: {structure_data}")
-                    state["errors"].append(f"Structure generation failed: {str(structure_data)}")
-                    structure_data = self._get_fallback_structure()
-                
-                if isinstance(images_data, Exception):
-                    logger.error(f"Image generation failed: {images_data}")
-                    state["errors"].append(f"Image generation failed: {str(images_data)}")
-                    images_data = self._get_fallback_images()
-                
+                # Store results in state
                 state["design_data"] = design_data
                 state["structure_data"] = structure_data
                 state["images_data"] = images_data
@@ -161,8 +201,18 @@ class WebsiteGenerationWorkflow:
             except asyncio.CancelledError:
                 logger.warning(f"Parallel generation cancelled for {state['generation_id']}")
                 raise
+            except Exception as e:
+                # If any agent fails after retries, the entire generation fails
+                logger.error(f"Parallel generation component failed after retries: {e}")
+                await manager.send_generation_update(state["generation_id"], {
+                    "type": "error",
+                    "message": f"Generation component failed: {str(e)}",
+                    "timestamp": datetime.datetime.now().isoformat()
+                })
+                # Re-raise the exception to fail the workflow
+                raise
             
-            logger.info(f"Parallel generation completed for {state['generation_id']}")
+            logger.info(f"Parallel generation completed successfully for {state['generation_id']}")
             return state
             
         except asyncio.CancelledError:
@@ -170,8 +220,8 @@ class WebsiteGenerationWorkflow:
             raise
         except Exception as e:
             logger.error(f"Parallel generation failed: {e}")
-            state["errors"].append(f"Parallel generation error: {str(e)}")
-            return state
+            # Re-raise the exception to fail the workflow instead of returning state with error
+            raise
     async def _quality_validation_node(self, state: GenerationState) -> GenerationState:
         """Validate quality using Quality Agent"""
         from api.routes.websocket import manager
@@ -238,10 +288,13 @@ class WebsiteGenerationWorkflow:
             # Save the generated website files to disk
             website_dir = os.path.join("uploads", "websites", state["generation_id"])
             os.makedirs(website_dir, exist_ok=True)
-            
-            # Generate HTML and CSS content
+              # Generate HTML and CSS content
             html_content = self._generate_final_html(state)
             css_content = self._generate_final_css(state)
+            
+            # Log the final assembled website (partial content for readability)
+            self.agent_logger.info(f"Final HTML (first 500 chars): {html_content[:500]}...")
+            self.agent_logger.info(f"Final CSS (first 500 chars): {css_content[:500]}...")
             
             # Save HTML file
             with open(os.path.join(website_dir, "index.html"), "w", encoding="utf-8") as f:
@@ -250,9 +303,10 @@ class WebsiteGenerationWorkflow:
             # Save CSS file
             with open(os.path.join(website_dir, "styles.css"), "w", encoding="utf-8") as f:
                 f.write(css_content)
-            
-            # Create website URL
-            website_url = f"/uploads/websites/{state['generation_id']}/index.html"
+              # Create website URL - use full URL for previews
+            relative_url = f"/uploads/websites/{state['generation_id']}/index.html"
+            # This ensures the URL works both for API responses and for serving static files
+            website_url = relative_url
             
             final_website = {
                 "websiteUrl": website_url,
@@ -575,39 +629,7 @@ a {{
 }}
 """
     
-    def _get_fallback_design(self) -> dict:
-        """Get fallback design data when generation fails"""
-        return {
-            "global_css": "body { font-family: Arial, sans-serif; margin: 0; padding: 0; }",
-            "header_css": ".header { background: #333; color: white; padding: 1rem; }",
-            "hero_css": ".hero { background: #f4f4f4; padding: 2rem; text-align: center; }",
-            "about_css": ".about { padding: 2rem; }",
-            "services_css": ".services { padding: 2rem; background: #f9f9f9; }",
-            "contact_css": ".contact { padding: 2rem; }",
-            "footer_css": ".footer { background: #333; color: white; padding: 1rem; text-align: center; }",
-            "responsive_css": "@media (max-width: 768px) { .container { padding: 1rem; } }"
-        }
-    
-    def _get_fallback_structure(self) -> dict:
-        """Get fallback structure data when generation fails"""
-        return {
-            "html_structure": "<div class='container'><h1>Website Under Construction</h1><p>Please try again later.</p></div>",
-            "navigation": "<nav><ul><li><a href='#home'>Home</a></li><li><a href='#about'>About</a></li></ul></nav>",
-            "sections": ["header", "hero", "about", "services", "contact", "footer"]
-        }
-    
-    def _get_fallback_images(self) -> dict:
-        """Get fallback image data when generation fails"""
-        return {
-            "hero_image": {"url": "https://via.placeholder.com/1200x600", "alt_description": "Hero image"},
-            "about_image": {"url": "https://via.placeholder.com/600x400", "alt_description": "About image"},
-            "service_images": [
-                {"url": "https://via.placeholder.com/400x300", "alt_description": "Service 1"},
-                {"url": "https://via.placeholder.com/400x300", "alt_description": "Service 2"},
-                {"url": "https://via.placeholder.com/400x300", "alt_description": "Service 3"}
-            ],
-            "background_images": {"url": "https://via.placeholder.com/1920x1080", "alt_description": "Background"}
-        }
+    # Fallback methods have been removed as we now use retry logic instead
 
     async def generate_website(self, generation_id: str, business_info: dict) -> dict:
         """

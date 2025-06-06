@@ -11,6 +11,7 @@ from datetime import datetime
 
 from workflows.workflow import WebsiteGenerationWorkflow
 from database.connection import get_database
+from core.logging import log_generation_separator
 
 logger = logging.getLogger(__name__)
 
@@ -100,12 +101,17 @@ class WebsiteGenerationService:
             )
         except Exception as e:
             logger.error(f"Failed to update failed generation {generation_id}: {e}")
-    
     async def _execute_generation(self, generation_id: str, business_info: dict):
         """
         Execute the generation workflow and send progress updates
         """
         try:
+            # Add clear separator for this generation in the agent log
+            log_generation_separator(
+                website_name=business_info.get('business_name', 'Unknown'),
+                session_id=generation_id
+            )
+            
             logger.info(f"Starting generation workflow for {generation_id}")
             
             # Set a reasonable timeout for the entire generation process
@@ -211,7 +217,7 @@ class WebsiteGenerationService:
                     "error": str(e)
                 })
             except ImportError:
-                logger.warning("WebSocket manager not available for error notifications")
+                logger.warning("WebSocket manager not available for error notifications")    
     async def get_generation_status(self, generation_id: str) -> Optional[Dict]:
         """
         Get the current status of a generation
@@ -222,19 +228,14 @@ class WebsiteGenerationService:
         Returns:
             Generation status data or None if not found
         """
-        try:
-            generation = await self.db.generations.find_one({"generation_id": generation_id})
-            
-            if generation:
-                # Remove MongoDB _id field for JSON serialization
-                generation.pop("_id", None)
-                return generation
-            
-            return None
-            
-        except Exception as e:
-            logger.error(f"Failed to get generation status for {generation_id}: {e}")
-            return None
+        generation = await self.db.generations.find_one({"generation_id": generation_id})
+        
+        if generation:
+            # Remove MongoDB _id field for JSON serialization
+            generation.pop("_id", None)
+            return generation
+        return None
+
     async def get_generation_result(self, generation_id: str) -> Optional[Dict]:
         """
         Get final generation result from database
@@ -245,41 +246,31 @@ class WebsiteGenerationService:
         Returns:
             Generation result data or None if not found
         """
-        try:
-            generation = await self.db.generations.find_one({"generation_id": generation_id})
-            
-            if generation:
-                # Remove MongoDB _id field for JSON serialization
-                generation.pop("_id", None)
-                return generation
-            
-            return None
-            
-        except Exception as e:
-            logger.error(f"Error getting generation result for {generation_id}: {e}")
-            return None
+        generation = await self.db.generations.find_one({"generation_id": generation_id})
+        
+        if generation:
+            # Remove MongoDB _id field for JSON serialization
+            generation.pop("_id", None)
+            return generation
+
+        return None
 
     async def get_completed_website(self, generation_id: str) -> Optional[Dict]:
         """
         Get the completed website data
-        
+
         Args:
             generation_id: ID of the generation
             
         Returns:
             Website data or None if not found/completed
         """
-        try:
-            generation = await self.get_generation_status(generation_id)
-            
-            if generation and generation.get("status") == "completed":
-                return generation.get("final_website")
-            
-            return None
-            
-        except Exception as e:
-            logger.error(f"Failed to get completed website for {generation_id}: {e}")
-            return None
+        generation = await self.get_generation_status(generation_id)
+        
+        if generation and generation.get("status") == "completed":
+            return generation.get("final_website")
+        
+        return None
 
 
 # Global service instance

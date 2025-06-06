@@ -5,6 +5,7 @@ Logging configuration for the AI Website Builder
 import logging
 import structlog
 import sys
+import datetime
 from pathlib import Path
 from core.config import settings
 
@@ -49,3 +50,61 @@ def setup_logging():
     # Add handler to root logger
     root_logger = logging.getLogger()
     root_logger.addHandler(file_handler)
+    
+    # Setup agent logging
+    setup_agent_logging()
+
+
+def setup_agent_logging():
+    """Setup agent-specific logging to a dedicated file"""
+    # Create agent logger
+    agent_logger = logging.getLogger('agents')
+    agent_logger.setLevel(getattr(logging, settings.LOG_LEVEL.upper()))
+    agent_logger.propagate = False  # Don't propagate to root logger
+    
+    # Create formatter with more details
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - [%(process)d] - %(message)s'
+    )
+    
+    # Create file handler for agent output
+    agent_handler = logging.FileHandler(settings.AGENT_LOG_FILE)
+    agent_handler.setFormatter(formatter)
+    agent_handler.setLevel(getattr(logging, settings.LOG_LEVEL.upper()))
+    
+    # Add handler to agent logger
+    agent_logger.addHandler(agent_handler)
+
+
+def get_agent_logger(agent_name):
+    """
+    Get a logger specifically for agent output
+    
+    Args:
+        agent_name: Name of the agent (e.g., 'structure', 'content')
+        
+    Returns:
+        Logger instance for the specific agent
+    """
+    # Ensure we use consistent names by removing '_agent' suffix if present
+    clean_name = agent_name.replace('_agent', '')
+    return logging.getLogger(f'agents.{clean_name}')
+
+
+def log_generation_separator(website_name=None, session_id=None):
+    """
+    Add a clear separator to the agent log file between website generations
+    
+    Args:
+        website_name: Name of the website being generated
+        session_id: Unique session ID for this generation
+    """
+    separator = f"\n{'=' * 80}\n"
+    timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    website_info = f"Website: {website_name}" if website_name else ""
+    session_info = f"Session ID: {session_id}" if session_id else ""
+    
+    message = f"{separator}NEW WEBSITE GENERATION - {timestamp}\n{website_info}\n{session_info}\n{separator}"
+    
+    logger = logging.getLogger('agents')
+    logger.info(message)
