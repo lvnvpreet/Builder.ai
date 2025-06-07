@@ -6,6 +6,8 @@ import httpx
 from core.config import settings
 import logging
 from core.logging import get_agent_logger
+from .enhanced_prompts import DynamicPromptManager
+from .enhanced_parsers import EnhancedResponseParser
 
 logger = logging.getLogger(__name__)
 agent_logger = get_agent_logger('structure')
@@ -17,6 +19,7 @@ class StructureAgent:
     def __init__(self):
         self.model = settings.STRUCTURE_MODEL
         self.ollama_url = settings.OLLAMA_BASE_URL
+        self.prompt_manager = DynamicPromptManager()
     
     async def generate_structure(self, business_info: dict, content_data: dict) -> dict:
         """
@@ -28,11 +31,11 @@ class StructureAgent:
             
         Returns:
             Dictionary containing HTML structure components
-        """
+        """        
         try:
             agent_logger.info(f"Starting structure generation for {business_info['business_name']}")
-            prompt = self._build_structure_prompt(business_info, content_data)
-            agent_logger.debug(f"Structure prompt: {prompt}")
+            prompt = self.prompt_manager.get_enhanced_structure_prompt(business_info, content_data)
+            agent_logger.debug(f"Enhanced structure prompt: {prompt[:500]}...")  # Log first 500 chars
             
             # Set a reasonable timeout for AI model calls
             timeout = httpx.Timeout(300.0, connect=30.0)  # 5 minutes total, 30 seconds connect
@@ -46,14 +49,14 @@ class StructureAgent:
                         "prompt": prompt,
                         "stream": False
                     }
-                )
+                )                
                 if response.status_code == 200:
                     result = response.json()
                     agent_logger.info("Structure generation successful")
-                    agent_logger.info("Parsing structure response")
-                    structured_result = self._parse_structure_response(result["response"])
+                    agent_logger.info("Parsing enhanced structure response")
+                    structured_result = EnhancedResponseParser.parse_enhanced_structure_response(result["response"])
                     # Log the actual output (truncated for log readability)
-                    agent_logger.info(f"Structure output: {str(structured_result)[:500]}...")
+                    agent_logger.info(f"Enhanced structure output: {str(structured_result)[:500]}...")
                     return structured_result
                 else:
                     error_msg = f"Ollama API error: {response.status_code}"

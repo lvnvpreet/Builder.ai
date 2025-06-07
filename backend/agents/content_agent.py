@@ -6,6 +6,8 @@ import httpx
 from core.config import settings
 import logging
 from core.logging import get_agent_logger
+from .enhanced_prompts import DynamicPromptManager
+from .enhanced_parsers import EnhancedResponseParser
 
 logger = logging.getLogger(__name__)
 agent_logger = get_agent_logger('content')
@@ -17,6 +19,7 @@ class ContentAgent:
     def __init__(self):
         self.model = settings.CONTENT_MODEL
         self.ollama_url = settings.CONTENT_MODEL_OLLAMA_BASE_URL # Use the specific URL for content model
+        self.prompt_manager = DynamicPromptManager()
     
     async def generate_content(self, business_info: dict) -> dict:
         """
@@ -27,11 +30,11 @@ class ContentAgent:
             
         Returns:
             Dictionary containing generated content
-        """        
+        """          
         try:
             agent_logger.info(f"Starting content generation for {business_info['business_name']}")
-            prompt = self._build_content_prompt(business_info)
-            agent_logger.debug(f"Content prompt: {prompt}")
+            prompt = self.prompt_manager.get_enhanced_content_prompt(business_info)
+            agent_logger.debug(f"Enhanced content prompt: {prompt[:500]}...")  # Log first 500 chars
             
             # Set a reasonable timeout for AI model calls
             timeout = httpx.Timeout(300.0, connect=30.0)  # 5 minutes total, 30 seconds connect
@@ -45,7 +48,7 @@ class ContentAgent:
                         "prompt": prompt,
                         "stream": False
                     }
-                )                
+                )                  
                 if response.status_code == 200:
                     result = response.json()
                     agent_logger.info(f"Successfully received raw content from model for {business_info['business_name']}")
@@ -53,10 +56,10 @@ class ContentAgent:
                     # Log a small snippet of the raw response for debugging
                     agent_logger.debug(f"Raw model response snippet: {raw_response[:200]}...")
                     
-                    parsed_response = self._parse_content_response(raw_response)
+                    parsed_response = EnhancedResponseParser.parse_enhanced_content_response(raw_response)
                     # Log the actual structured output (truncated for log readability)
-                    agent_logger.info(f"Successfully parsed content with fields: {', '.join(parsed_response.keys())}")
-                    agent_logger.info(f"Content output sample: {str(parsed_response)[:500]}...")
+                    agent_logger.info(f"Successfully parsed enhanced content with fields: {', '.join(parsed_response.keys())}")
+                    agent_logger.info(f"Enhanced content output sample: {str(parsed_response)[:500]}...")
                     return parsed_response
                 else:
                     agent_logger.error(f"Ollama API error: {response.status_code}")                    

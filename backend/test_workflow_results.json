@@ -1,0 +1,61 @@
+{
+  "business_info": {
+    "business_name": "Star Plumbers, NY",
+    "business_category": "plumbing",
+    "business_description": "Professional emergency plumbing services in New York City. Licensed, insured, and available 24/7.",
+    "target_audience": "NYC residents and businesses needing reliable plumbing services",
+    "location": "New York City, NY"
+  },
+  "content_keys": [
+    "hero_headline",
+    "hero_subtitle",
+    "hero_cta",
+    "about_headline",
+    "about_content",
+    "about_content_second",
+    "about_content_third",
+    "services_headline",
+    "services",
+    "testimonial_placeholder",
+    "contact_headline",
+    "contact_content",
+    "meta_title",
+    "meta_description",
+    "primary_keywords",
+    "tone_indicators"
+  ],
+  "design_keys": [
+    "css_variables",
+    "base_styles",
+    "layout_styles",
+    "component_styles",
+    "responsive_styles",
+    "animation_styles",
+    "utility_classes",
+    "dark_mode_styles",
+    "performance_optimizations",
+    "design_tokens",
+    "color_scheme",
+    "header",
+    "hero"
+  ],
+  "structure_keys": [
+    "document_structure",
+    "head_section",
+    "body_components",
+    "navigation",
+    "content_sections",
+    "forms",
+    "accessibility_features",
+    "performance_optimization",
+    "html_structure",
+    "meta_tags",
+    "header",
+    "nav",
+    "main",
+    "footer"
+  ],
+  "html_length": 5501,
+  "css_length": 6746,
+  "test_passed": true
+}

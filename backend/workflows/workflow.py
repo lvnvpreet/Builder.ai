@@ -355,16 +355,151 @@ class WebsiteGenerationWorkflow:
             })
             return state
 
+    def _generate_footer_content(self, content_data: dict, business_info: dict) -> str:
+        """Generate enhanced footer with comprehensive business information"""
+        business_name = business_info.get('business_name', 'Your Business')
+        business_category = business_info.get('business_category', 'Business')
+        business_location = business_info.get('location', '')
+        business_description = business_info.get('business_description', '')
+        
+        # Use content data if available, otherwise create basic info from business_info
+        footer_info = content_data.get('footer_contact_info', {})
+        footer_services = content_data.get('footer_services', [])
+        footer_areas = content_data.get('footer_areas', [])
+        footer_social = content_data.get('footer_social_links', {})
+        footer_description = content_data.get('footer_company_description', business_description)
+        
+        # If no footer content was generated, create basic info from business_info
+        if not footer_info:
+            footer_info = {
+                'address': business_location if business_location else f'{business_name} Location',
+                'phone': '(555) 123-4567',  # Default phone
+                'email': f'info@{business_name.lower().replace(" ", "").replace(",", "")}.com',
+                'hours': 'Mon-Fri 9AM-6PM'
+            }
+        
+        if not footer_services:
+            # Create basic services based on business category
+            footer_services = self._get_default_services_for_category(business_category)
+        
+        if not footer_areas and business_location:
+            # Use the business location as a service area
+            footer_areas = [business_location]
+        
+        # Company info section
+        company_section = f"""
+            <div class="footer-section">
+                <h3>{business_name}</h3>
+                <p>{footer_description}</p>
+                {f'<p><strong>Location:</strong> {footer_info.get("address", "")}</p>' if footer_info.get("address") else ''}
+            </div>
+        """
+        
+        # Services section
+        services_section = ""
+        if footer_services:
+            services_list = ''.join([f'<li><a href="#services">{service}</a></li>' for service in footer_services[:4]])
+            services_section = f"""
+            <div class="footer-section">
+                <h3>Our Services</h3>
+                <ul>
+                    {services_list}
+                </ul>
+            </div>
+            """
+        
+        # Service areas section
+        areas_section = ""
+        if footer_areas:
+            areas_list = ''.join([f'<li>{area}</li>' for area in footer_areas[:4]])
+            areas_section = f"""
+            <div class="footer-section">
+                <h3>Service Areas</h3>
+                <ul>
+                    {areas_list}
+                </ul>
+            </div>
+            """
+        
+        # Contact section
+        contact_section = f"""
+            <div class="footer-section">
+                <h3>Contact Info</h3>
+                {f'<p><strong>Phone:</strong> <a href="tel:{footer_info.get("phone", "")}">{footer_info.get("phone", "")}</a></p>' if footer_info.get("phone") else ''}
+                {f'<p><strong>Email:</strong> <a href="mailto:{footer_info.get("email", "")}">{footer_info.get("email", "")}</a></p>' if footer_info.get("email") else ''}
+                {f'<p><strong>Hours:</strong> {footer_info.get("hours", "")}</p>' if footer_info.get("hours") else ''}
+                
+                <div class="social-links">
+                    {f'<a href="{footer_social.get("facebook", "#")}" aria-label="Facebook"><span>📘</span></a>' if footer_social.get("facebook") else ''}
+                    {f'<a href="{footer_social.get("twitter", "#")}" aria-label="Twitter"><span>🐦</span></a>' if footer_social.get("twitter") else ''}
+                    {f'<a href="{footer_social.get("linkedin", "#")}" aria-label="LinkedIn"><span>💼</span></a>' if footer_social.get("linkedin") else ''}
+                    {f'<a href="{footer_social.get("instagram", "#")}" aria-label="Instagram"><span>📷</span></a>' if footer_social.get("instagram") else ''}
+                </div>
+            </div>
+        """
+        
+        return f"""
+        <footer class="footer">
+            <div class="container">
+                <div class="footer-content">
+                    {company_section}
+                    {services_section}
+                    {areas_section}
+                    {contact_section}
+                </div>
+                <div class="footer-bottom">
+                    <p>&copy; {datetime.datetime.now().year} {business_name}. All rights reserved.</p>
+                </div>
+            </div>
+        </footer>
+        """
+
+    def _get_default_services_for_category(self, category: str) -> list:
+        """Generate default services based on business category"""
+        default_services = {
+            'plumbing': ['Emergency Repair', 'Drain Cleaning', 'Water Heater Service', 'Bathroom Plumbing'],
+            'restaurant': ['Dine In', 'Takeout', 'Catering', 'Private Events'],
+            'healthcare': ['Consultations', 'Check-ups', 'Emergency Care', 'Specialized Treatment'],
+            'legal': ['Consultation', 'Document Review', 'Court Representation', 'Legal Advice'],
+            'fitness': ['Personal Training', 'Group Classes', 'Nutrition Coaching', 'Membership Plans'],
+            'technology': ['Software Development', 'Consulting', 'Support', 'Custom Solutions'],
+            'finance': ['Financial Planning', 'Investment Advice', 'Tax Services', 'Insurance'],
+            'real estate': ['Buying', 'Selling', 'Rentals', 'Property Management'],
+            'education': ['Courses', 'Tutoring', 'Online Learning', 'Certification'],
+            'automotive': ['Repair', 'Maintenance', 'Inspection', 'Parts'],
+            'construction': ['Residential', 'Commercial', 'Renovation', 'Maintenance'],
+            'retail': ['Sales', 'Customer Service', 'Returns', 'Special Orders']
+        }
+        
+        return default_services.get(category.lower(), ['Service 1', 'Service 2', 'Service 3', 'Service 4'])
+
     def _generate_final_html(self, state: GenerationState) -> str:
         """Generate the final HTML document"""
         business_name = state['business_info'].get('business_name', 'Professional Website')
+        content_data = state.get('content_data', {})
+        
+        # Generate services HTML from the services array
+        services_html = self._generate_services_html(content_data.get('services', []))
+        
+        # Get hero content with proper fallbacks
+        hero_headline = content_data.get('hero_headline', 'Welcome to our website')
+        hero_subtitle = content_data.get('hero_subtitle', 'Professional services for your needs')
+        hero_cta = content_data.get('hero_cta', 'Get Started')
+        
+        # Get about content - could be multiple paragraphs
+        about_content = self._generate_about_html(content_data)
+        
+        # Get contact content
+        contact_headline = content_data.get('contact_headline', 'Contact Us')
+        contact_content = content_data.get('contact_content', 'Get in touch with us today.')
+        
         return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{business_name} - {state['content_data'].get('meta_title', 'Professional Website')}</title>
-    <meta name="description" content="{state['content_data'].get('meta_description', '')}">
+    <title>{content_data.get('meta_title', f'{business_name} - Professional Website')}</title>
+    <meta name="description" content="{content_data.get('meta_description', 'Professional services for your business needs')}">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -385,46 +520,45 @@ class WebsiteGenerationWorkflow:
     <main>
         <section class="hero">
             <div class="container">
-                <h2>{state['content_data'].get('headline', 'Welcome to our website')}</h2>
-                <p>{state['content_data'].get('tagline', 'Professional services for your needs')}</p>
+                <h2>{hero_headline}</h2>
+                <p>{hero_subtitle}</p>
+                <div class="hero-cta">
+                    <a href="#contact" class="cta-button">{hero_cta}</a>
+                </div>
             </div>
         </section>
         
         <section id="about" class="about">
             <div class="container">
-                <h2>About Us</h2>
-                <p>{state['content_data'].get('about_content', 'Information about our business')}</p>
+                <h2>{content_data.get('about_headline', 'About Us')}</h2>
+                {about_content}
             </div>
         </section>
         
         <section id="services" class="services">
             <div class="container">
-                <h2>Our Services</h2>
+                <h2>{content_data.get('services_headline', 'Our Services')}</h2>
                 <div class="services-grid">
-                    {state['content_data'].get('services_content', '<p>Our services information</p>')}
+                    {services_html}
                 </div>
             </div>
         </section>
         
         <section id="contact" class="contact">
             <div class="container">
-                <h2>Contact Us</h2>
-                <p>{state['content_data'].get('contact_content', 'Contact information')}</p>
+                <h2>{contact_headline}</h2>
+                <p>{contact_content}</p>
                 <form>
-                    <input type="text" placeholder="Your Name">
-                    <input type="email" placeholder="Your Email">
-                    <textarea placeholder="Your Message"></textarea>
+                    <input type="text" placeholder="Your Name" required>
+                    <input type="tel" placeholder="Phone Number">
+                    <input type="email" placeholder="Your Email" required>
+                    <textarea placeholder="Your Message" required></textarea>
                     <button type="submit">Send Message</button>
                 </form>
-            </div>
-        </section>
+            </div>        </section>
     </main>
     
-    <footer class="footer">
-        <div class="container">
-            <p>&copy; {datetime.datetime.now().year} {business_name}. All rights reserved.</p>
-        </div>
-    </footer>
+    {self._generate_footer_content(content_data, state['business_info'])}
 </body>
 </html>"""
     def _generate_final_css(self, state: GenerationState) -> str:
@@ -487,6 +621,7 @@ a {{
 .header h1 {{
     font-size: 1.5rem;
     margin: 0;
+    color: {primary_color};
 }}
 
 .header nav ul {{
@@ -499,6 +634,319 @@ a {{
 }}
 
 .header nav ul li a {{
+    color: #333;
+    transition: color 0.3s;
+    font-weight: 500;
+}}
+
+.header nav ul li a:hover {{
+    color: {primary_color};
+}}
+
+/* Hero Section */
+.hero {{
+    background: linear-gradient(135deg, {primary_color}, {secondary_color});
+    color: #fff;
+    padding: 5rem 0;
+    text-align: center;
+}}
+
+.hero h2 {{
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+}}
+
+.hero p {{
+    font-size: 1.2rem;
+    max-width: 800px;
+    margin: 0 auto 2rem;
+}}
+
+.hero-cta {{
+    margin-top: 2rem;
+}}
+
+.cta-button {{
+    background-color: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    padding: 1rem 2rem;
+    border-radius: 8px;
+    font-weight: bold;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    transition: all 0.3s ease;
+    display: inline-block;
+}}
+
+.cta-button:hover {{
+    background-color: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-2px);
+}}
+
+/* About Section */
+.about {{
+    padding: 5rem 0;
+    background-color: #f9f9f9;
+}}
+
+.about h2 {{
+    color: {primary_color};
+    font-size: 2rem;
+    margin-bottom: 2rem;
+}}
+
+.about p {{
+    font-size: 1.1rem;
+    margin-bottom: 1.5rem;
+    color: #555;
+}}
+
+/* Services Section */
+.services {{
+    padding: 5rem 0;
+}}
+
+.services h2 {{
+    color: {primary_color};
+    font-size: 2rem;
+    margin-bottom: 3rem;
+    text-align: center;
+}}
+
+.services-grid {{
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    margin-top: 2rem;
+}}
+
+.service-card {{
+    background: #fff;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    border: 1px solid #eee;
+}}
+
+.service-card:hover {{
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}}
+
+.service-icon {{
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}}
+
+.service-card h3 {{
+    color: {primary_color};
+    font-size: 1.3rem;
+    margin-bottom: 1rem;
+}}
+
+.service-card p {{
+    color: #666;
+    line-height: 1.6;
+}}
+
+/* Contact Section */
+.contact {{
+    padding: 5rem 0;
+    background-color: #f9f9f9;
+}}
+
+.contact h2 {{
+    color: {primary_color};
+    font-size: 2rem;
+    margin-bottom: 2rem;
+}}
+
+.contact p {{
+    font-size: 1.1rem;
+    margin-bottom: 2rem;
+    color: #555;
+}}
+
+.contact form {{
+    margin-top: 2rem;
+    max-width: 600px;
+}}
+
+.contact input,
+.contact textarea {{
+    width: 100%;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 1rem;
+    transition: border-color 0.3s ease;
+}}
+
+.contact input:focus,
+.contact textarea:focus {{
+    outline: none;
+    border-color: {primary_color};
+}}
+
+.contact textarea {{
+    min-height: 150px;
+    resize: vertical;
+}}
+
+.contact button {{
+    background-color: {primary_color};
+    color: #fff;
+    border: none;
+    padding: 1rem 2rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: bold;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}}
+
+.contact button:hover {{
+    background-color: {secondary_color};
+    transform: translateY(-2px);
+}}
+
+/* Footer */
+.footer {{
+    background-color: #2c3e50;
+    color: #ecf0f1;
+    padding: 3rem 0 1rem;
+}}
+
+.footer-content {{
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 2rem;
+    margin-bottom: 2rem;
+}}
+
+.footer-section h3 {{
+    color: #fff;
+    margin-bottom: 1rem;
+    font-size: 1.2rem;
+    font-weight: 600;
+}}
+
+.footer-section p {{
+    margin-bottom: 0.5rem;
+    line-height: 1.6;
+}}
+
+.footer-section ul {{
+    list-style: none;
+    padding: 0;
+}}
+
+.footer-section ul li {{
+    margin-bottom: 0.5rem;
+}}
+
+.footer-section ul li a {{
+    color: #bdc3c7;
+    text-decoration: none;
+    transition: color 0.3s ease;
+}}
+
+.footer-section ul li a:hover {{
+    color: {primary_color};
+}}
+
+.footer-section a {{
+    color: #3498db;
+    text-decoration: none;
+    transition: color 0.3s ease;
+}}
+
+.footer-section a:hover {{
+    color: {primary_color};
+}}
+
+.social-links {{
+    display: flex;
+    gap: 1rem;
+    margin-top: 1rem;
+}}
+
+.social-links a {{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background-color: #34495e;
+    border-radius: 50%;
+    color: #fff;
+    text-decoration: none;
+    transition: all 0.3s ease;
+}}
+
+.social-links a:hover {{
+    background-color: {primary_color};
+    transform: translateY(-2px);
+}}
+
+.footer-bottom {{
+    border-top: 1px solid #34495e;
+    padding-top: 2rem;
+    text-align: center;
+}}
+
+.footer-bottom p {{
+    margin: 0;
+    color: #95a5a6;
+}}
+
+/* Responsive Styles */
+@media (max-width: 768px) {{
+    .header .container {{
+        flex-direction: column;
+        gap: 1rem;
+    }}
+    
+    .header nav ul {{
+        justify-content: center;
+    }}
+    
+    .header nav ul li {{
+        margin: 0 0.75rem;
+    }}
+    
+    .hero {{
+        padding: 3rem 0;
+    }}
+    
+    .hero h2 {{
+        font-size: 2rem;
+    }}
+    
+    .services-grid {{
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }}
+}}
+
+@media (max-width: 576px) {{
+    .hero h2 {{
+        font-size: 1.8rem;
+    }}
+    
+    .about, .services, .contact {{
+        padding: 3rem 0;
+    }}
+    
+    .service-card {{
+        padding: 1.5rem;
+    }}
+
     color: #333;
     transition: color 0.3s;
 }}
@@ -585,10 +1033,92 @@ a {{
 
 /* Footer */
 .footer {{
-    background-color: #333;
+    background-color: #2c3e50;
+    color: #ecf0f1;
+    padding: 3rem 0 1rem;
+}}
+
+.footer-content {{
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 2rem;
+    margin-bottom: 2rem;
+}}
+
+.footer-section h3 {{
     color: #fff;
-    padding: 2rem 0;
+    margin-bottom: 1rem;
+    font-size: 1.2rem;
+    font-weight: 600;
+}}
+
+.footer-section p {{
+    margin-bottom: 0.5rem;
+    line-height: 1.6;
+}}
+
+.footer-section ul {{
+    list-style: none;
+    padding: 0;
+}}
+
+.footer-section ul li {{
+    margin-bottom: 0.5rem;
+}}
+
+.footer-section ul li a {{
+    color: #bdc3c7;
+    text-decoration: none;
+    transition: color 0.3s ease;
+}}
+
+.footer-section ul li a:hover {{
+    color: {primary_color};
+}}
+
+.footer-section a {{
+    color: #3498db;
+    text-decoration: none;
+    transition: color 0.3s ease;
+}}
+
+.footer-section a:hover {{
+    color: {primary_color};
+}}
+
+.social-links {{
+    display: flex;
+    gap: 1rem;
+    margin-top: 1rem;
+}}
+
+.social-links a {{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background-color: #34495e;
+    border-radius: 50%;
+    color: #fff;
+    text-decoration: none;
+    transition: all 0.3s ease;
+}}
+
+.social-links a:hover {{
+    background-color: {primary_color};
+    transform: translateY(-2px);
+}}
+
+.footer-bottom {{
+    border-top: 1px solid #34495e;
+    padding-top: 2rem;
     text-align: center;
+}}
+
+.footer-bottom p {{
+    margin: 0;
+    color: #95a5a6;
 }}
 
 /* Responsive Styles */
@@ -628,8 +1158,85 @@ a {{
     }}
 }}
 """
+
+    def _generate_services_html(self, services_data) -> str:
+
+        """Generate HTML for services section from services array"""
+        if not services_data:
+            return '<p>Our services information will be available soon.</p>'
+        
+        # If services_data is a list of service objects
+        if isinstance(services_data, list):
+            services_html = ""
+            for service in services_data:
+                if isinstance(service, dict):
+                    name = service.get('name', 'Service')
+                    description = service.get('description', 'Service description')
+                    icon = service.get('icon_suggestion', 'service')
+                    
+                    # Generate icon based on suggestion
+                    icon_html = self._get_service_icon(icon)
+                    
+                    services_html += f"""
+                    <div class="service-card">
+                        <div class="service-icon">{icon_html}</div>
+                        <h3>{name}</h3>
+                        <p>{description}</p>
+                    </div>
+                    """
+                else:
+                    # If it's just a string
+                    services_html += f"""
+                    <div class="service-card">
+                        <h3>{service}</h3>
+                    </div>
+                    """
+            return services_html
+        
+        # If services_data is a string, just return it wrapped
+        return f'<div class="service-content">{services_data}</div>'
     
-    # Fallback methods have been removed as we now use retry logic instead
+    def _generate_about_html(self, content_data) -> str:
+        """Generate HTML for about section from content data"""
+        about_parts = []
+        
+        # Check for multiple about content fields
+        if content_data.get('about_content'):
+            about_parts.append(f"<p>{content_data['about_content']}</p>")
+        
+        if content_data.get('about_content_second'):
+            about_parts.append(f"<p>{content_data['about_content_second']}</p>")
+        
+        if content_data.get('about_content_third'):
+            about_parts.append(f"<p>{content_data['about_content_third']}</p>")
+        
+        # If no specific about content, use a default
+        if not about_parts:
+            about_parts.append("<p>We are a professional business dedicated to providing excellent services to our clients.</p>")
+        
+        return "\n                ".join(about_parts)
+    
+    def _get_service_icon(self, icon_suggestion) -> str:
+        """Generate appropriate icon based on suggestion"""
+        icon_map = {
+            'clock': '🕐',
+            'emergency': '🚨', 
+            'repair': '🔧',
+            'wrench': '🔧',
+            'drain': '🚿',
+            'water': '💧',
+            'plumbing': '🔧',
+            'home': '🏠',
+            'service': '⚙️',
+            'tool': '🛠️',
+            'phone': '📞',
+            'help': '❓',
+            'check': '✅',
+            'star': '⭐'
+        }
+        
+        # Return matching icon or default
+        return icon_map.get(icon_suggestion.lower(), '⚙️')
 
     async def generate_website(self, generation_id: str, business_info: dict) -> dict:
         """

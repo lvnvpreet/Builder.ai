@@ -6,6 +6,8 @@ import httpx
 from core.config import settings
 import logging
 from core.logging import get_agent_logger
+from .enhanced_prompts import DynamicPromptManager
+from .enhanced_parsers import EnhancedResponseParser
 
 logger = logging.getLogger(__name__)
 agent_logger = get_agent_logger('design')
@@ -17,6 +19,7 @@ class DesignAgent:
     def __init__(self):
         self.model = settings.DESIGN_MODEL
         self.ollama_url = settings.OLLAMA_BASE_URL
+        self.prompt_manager = DynamicPromptManager()
     async def generate_design(self, business_info: dict, content_data: dict) -> dict:
         """
         Generate CSS styles and design components
@@ -27,11 +30,11 @@ class DesignAgent:
             
         Returns:
             Dictionary containing CSS styles and design specifications
-        """        
+        """          
         try:
             agent_logger.info(f"Starting design generation for {business_info['business_name']}")
-            prompt = self._build_design_prompt(business_info, content_data)
-            agent_logger.debug(f"Design prompt: {prompt}")
+            prompt = self.prompt_manager.get_enhanced_design_prompt(business_info, content_data)
+            agent_logger.debug(f"Enhanced design prompt: {prompt[:500]}...")  # Log first 500 chars
             
             # Set a reasonable timeout for AI model calls
             timeout = httpx.Timeout(300.0, connect=30.0)  # 5 minutes total, 30 seconds connect
@@ -45,13 +48,13 @@ class DesignAgent:
                         "prompt": prompt,
                         "stream": False
                     }
-                )                
+                )
                 if response.status_code == 200:
                     result = response.json()
                     agent_logger.info(f"Successfully generated design for {business_info['business_name']}")
-                    parsed_design = self._parse_design_response(result["response"])
+                    parsed_design = EnhancedResponseParser.parse_enhanced_design_response(result["response"])
                     # Log the actual output (truncated for log readability)
-                    agent_logger.info(f"Design output: {str(parsed_design)[:500]}...")
+                    agent_logger.info(f"Enhanced design output: {str(parsed_design)[:500]}...")
                     return parsed_design
                 else:
                     agent_logger.error(f"Ollama API error: {response.status_code}")
